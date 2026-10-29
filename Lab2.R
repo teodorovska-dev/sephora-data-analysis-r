@@ -1,4 +1,4 @@
-# LABORATORY WORK No. 2 — DATA ANALYSIS AND VISUALIZATION
+# LABORATORY WORK No. 2 — DATA ANALYSIS AND VISUALIZATIONпу
 # Dataset: https://www.kaggle.com/datasets/nadyinky/sephora-products-and-skincare-reviews/data
 
 
@@ -322,7 +322,7 @@ mean_all <- mean(prices_all)
 median_all <- median(prices_all)
 log_prices <- log10(prices_all)
 
-# Equal-width bins on the log10 scale accommodate the wide price range.
+# Compute all histogram bins from the complete price dataset.
 bin_width_log <- 0.07
 
 log_breaks <- seq(
@@ -331,7 +331,9 @@ log_breaks <- seq(
   by = bin_width_log
 )
 
-price_ticks <- c(3, 5, 10, 20, 35, 50, 100, 200, 500, 1000, 1900)
+# Display only prices up to $500; calculations still use all prices.
+display_price_range <- c(3, 500)
+price_ticks <- c(3, 5, 10, 20, 35, 50, 100, 200, 500)
 
 price_tick_labels <- paste0(
   "$", format(price_ticks, big.mark = ",", trim = TRUE)
@@ -423,6 +425,11 @@ histogram_plot <- ggplot2::ggplot(
     expand = ggplot2::expansion(mult = c(0, 0.10))
   ) +
   
+  # Zoom the visible range without removing expensive items from bin counts.
+  ggplot2::coord_cartesian(
+    xlim = log10(display_price_range)
+  ) +
+  
   ggplot2::labs(
     title = "Distribution of Sephora Product Prices",
     subtitle = sprintf(
@@ -433,7 +440,8 @@ histogram_plot <- ggplot2::ggplot(
     y = "Number of products",
     caption = paste(
       "Source: Sephora Products and Skincare Reviews (Kaggle).",
-      "Equal-width intervals in log10(price); all valid prices included."
+      "Equal-width bins in log10(price); display limited to $500.",
+      "All valid prices retained in calculations."
     )
   ) +
   
@@ -549,6 +557,7 @@ plot(
   xlab = "Product price (USD, logarithmic scale)",
   ylab = "Number of products",
   xaxt = "n",
+  xlim = log10(display_price_range),
   ylim = c(0, max(base_histogram$counts) * 1.20),
   cex.main = 1.35,
   cex.lab = 1,
@@ -586,7 +595,10 @@ legend(
 )
 
 mtext(
-  "Source: Sephora Products and Skincare Reviews (Kaggle). Equal-width intervals in log10(price).",
+  paste(
+    "Source: Sephora Products and Skincare Reviews (Kaggle).",
+    "Display limited to $500; all valid prices retained in calculations."
+  ),
   side = 1,
   line = 4.5,
   adj = 0,
@@ -602,9 +614,10 @@ cat("results/plots/hist_base_prices.png\n")
 
 
 # STAGE 4 — DENSITY PLOT ANALYSIS
+# Four exports: overlapping density curves (Base R + ggplot2), plus additional
+# two-panel histogram + density views (Base R + ggplot2).
 
-# Prepare skincare prices by Sephora exclusivity
-
+# Data preparation (same selection and statistical meaning as before)
 if (!requireNamespace("ggplot2", quietly = TRUE)) {
   stop("Package 'ggplot2' is required. Run install.packages('ggplot2').")
 }
@@ -626,13 +639,11 @@ skincare_density$sephora_exclusive <- factor(
   as.character(skincare_density$sephora_exclusive),
   levels = c("No", "Yes")
 )
-
 skincare_density$log_price <- log10(skincare_density$price_usd)
 
 regular_prices <- skincare_density$price_usd[
   skincare_density$sephora_exclusive == "No"
 ]
-
 exclusive_prices <- skincare_density$price_usd[
   skincare_density$sephora_exclusive == "Yes"
 ]
@@ -642,326 +653,435 @@ if (length(unique(regular_prices)) < 2L ||
   stop("Both exclusivity groups must contain at least two different prices.")
 }
 
-# Use a shared bandwidth on log10(price) for comparable smoothing.
+# Shared bin edges and KDE bandwidth make the two panels comparable.
 skincare_bw <- stats::bw.nrd0(skincare_density$log_price)
-
 if (!is.finite(skincare_bw) || skincare_bw <= 0) {
   stop("Invalid smoothing bandwidth for skincare comparison.")
 }
 
-regular_median <- median(regular_prices)
-exclusive_median <- median(exclusive_prices)
+density_binwidth <- 0.07
+hist_min <- floor(min(skincare_density$log_price) / density_binwidth) * density_binwidth
+hist_max <- (ceiling(max(skincare_density$log_price) / density_binwidth) + 1) * density_binwidth
+hist_breaks <- seq(hist_min, hist_max, by = density_binwidth)
+
+regular_median <- stats::median(regular_prices)
+exclusive_median <- stats::median(exclusive_prices)
+
+regular_density <- stats::density(log10(regular_prices), bw = skincare_bw)
+exclusive_density <- stats::density(log10(exclusive_prices), bw = skincare_bw)
+regular_hist <- graphics::hist(log10(regular_prices), breaks = hist_breaks,
+                               right = FALSE, include.lowest = TRUE, plot = FALSE)
+exclusive_hist <- graphics::hist(log10(exclusive_prices), breaks = hist_breaks,
+                                 right = FALSE, include.lowest = TRUE, plot = FALSE)
+
+density_ymax <- max(
+  regular_density$y, exclusive_density$y,
+  regular_hist$density, exclusive_hist$density
+) * 1.22
 
 cat(sprintf("Skincare, non-exclusive: n = %d; median = $%.2f\n",
             length(regular_prices), regular_median))
-
 cat(sprintf("Skincare, Sephora-exclusive: n = %d; median = $%.2f\n",
             length(exclusive_prices), exclusive_median))
 
-
-# Consistent Lavender & Raspberry palette
-
+# Lavender & Raspberry — lighter bar tones, saturated line tones.
 density_bg <- "#FCFAFF"
 density_text <- "#25233A"
 density_grid <- "#E8E3F0"
 density_lavender <- "#9A6AFF"
 density_raspberry <- "#E65083"
+density_lavender_light <- "#DED1FB"
+density_raspberry_light <- "#F9CADE"
 density_subtitle <- "#69627A"
 density_caption <- "#797286"
+density_strip <- "#F2EEF9"
 
-density_colors <- c(
-  "No" = density_lavender,
-  "Yes" = density_raspberry
+line_colors <- c("No" = density_lavender, "Yes" = density_raspberry)
+bar_colors <- c("No" = density_lavender_light, "Yes" = density_raspberry_light)
+
+# The first panel is non-exclusive, the second is Sephora-exclusive.
+regular_label <- sprintf("NON-EXCLUSIVE     |     %s PRODUCTS",
+                         format(length(regular_prices), big.mark = ","))
+exclusive_label <- sprintf("SEPHORA-EXCLUSIVE     |     %s PRODUCTS",
+                           format(length(exclusive_prices), big.mark = ","))
+
+skincare_density$group_label <- factor(
+  ifelse(skincare_density$sephora_exclusive == "No", regular_label, exclusive_label),
+  levels = c(regular_label, exclusive_label)
 )
 
-skincare_ticks <- c(
-  3, 5, 10, 20, 35, 50, 100, 200, 500, 1000, 1900
+median_info <- data.frame(
+  group_label = factor(c(regular_label, exclusive_label),
+                       levels = c(regular_label, exclusive_label)),
+  sephora_exclusive = factor(c("No", "Yes"), levels = c("No", "Yes")),
+  median_log = log10(c(regular_median, exclusive_median)),
+  median_label = sprintf("Median  $%.0f", c(regular_median, exclusive_median))
 )
 
+skincare_ticks <- c(3, 5, 10, 20, 35, 50, 100, 200, 500, 1000, 1900)
 skincare_tick_labels <- paste0(
   "$", format(skincare_ticks, big.mark = ",", trim = TRUE)
 )
 
-density_subtitle_text <- sprintf(
-  "Non-exclusive: n = %s, median = $%.0f  |  Sephora-exclusive: n = %s, median = $%.0f",
-  format(length(regular_prices), big.mark = ","),
-  regular_median,
-  format(length(exclusive_prices), big.mark = ","),
-  exclusive_median
-)
-
-
-# Density plot using ggplot2
-
-plot_skincare_density <- ggplot2::ggplot(
+# Additional ggplot2 view: separate panels avoid stacked colors masking each other.
+plot_skincare_density_faceted <- ggplot2::ggplot(
   skincare_density,
-  ggplot2::aes(
-    x = log_price,
-    color = sephora_exclusive,
-    fill = sephora_exclusive
-  )
+  ggplot2::aes(x = log_price)
 ) +
-  
+  ggplot2::geom_histogram(
+    ggplot2::aes(y = ggplot2::after_stat(density),
+                 fill = sephora_exclusive),
+    breaks = hist_breaks,
+    closed = "left",
+    color = density_bg,
+    linewidth = 0.30,
+    alpha = 0.93
+  ) +
   ggplot2::geom_density(
+    ggplot2::aes(color = sephora_exclusive),
     bw = skincare_bw,
-    alpha = 0.20,
-    linewidth = 1.15
+    fill = NA,
+    linewidth = 1.35,
+    adjust = 1
   ) +
-  
-  ggplot2::scale_color_manual(
-    values = density_colors,
-    breaks = c("No", "Yes"),
-    labels = c("Non-exclusive", "Sephora-exclusive")
+  ggplot2::geom_vline(
+    data = median_info,
+    ggplot2::aes(xintercept = median_log, color = sephora_exclusive),
+    linewidth = 0.85,
+    linetype = "22",
+    show.legend = FALSE
   ) +
-  
-  ggplot2::scale_fill_manual(
-    values = density_colors,
-    breaks = c("No", "Yes"),
-    labels = c("Non-exclusive", "Sephora-exclusive")
+  ggplot2::geom_label(
+    data = median_info,
+    ggplot2::aes(x = median_log, y = density_ymax * 0.92,
+                 label = median_label, color = sephora_exclusive),
+    inherit.aes = FALSE,
+    hjust = -0.07,
+    size = 3.8,
+    fontface = "bold",
+    fill = density_bg,
+    label.size = 0,
+    label.padding = grid::unit(0.28, "lines"),
+    show.legend = FALSE
   ) +
-  
+  ggplot2::facet_wrap(~group_label, ncol = 1) +
+  ggplot2::scale_fill_manual(values = bar_colors, guide = "none") +
+  ggplot2::scale_color_manual(values = line_colors, guide = "none") +
   ggplot2::scale_x_continuous(
     breaks = log10(skincare_ticks),
     labels = skincare_tick_labels,
-    expand = ggplot2::expansion(mult = c(0.01, 0.02))
+    expand = ggplot2::expansion(mult = c(0.005, 0.01))
   ) +
-  
   ggplot2::scale_y_continuous(
-    expand = ggplot2::expansion(mult = c(0, 0.10))
+    breaks = pretty(c(0, density_ymax), n = 4),
+    expand = ggplot2::expansion(mult = c(0, 0.01))
   ) +
-  
+  ggplot2::coord_cartesian(
+    xlim = log10(c(3, 1900)),
+    ylim = c(0, density_ymax),
+    expand = FALSE
+  ) +
   ggplot2::labs(
-    title = "Distribution of Skincare Prices by Exclusivity",
-    subtitle = density_subtitle_text,
-    x = "Product price (USD, log10 scale)",
+    title = "Skincare Prices by Sephora Exclusivity",
+    subtitle = "Price distribution within each group  |  Histogram and smoothed density",
+    x = "Product price (USD, logarithmic scale)",
     y = "Density per log10(price) unit",
-    color = "Sephora status",
-    fill = "Sephora status",
     caption = paste(
       "Source: Sephora Products and Skincare Reviews (Kaggle).",
-      "Each curve is independently normalized; comparisons are descriptive."
+      "Bars and curves are normalized within each group; the same scales, bins and bandwidth are used."
     )
   ) +
-  
-  ggplot2::theme_minimal(
-    base_size = 13,
-    base_family = "sans"
-  ) +
-  
+  ggplot2::theme_minimal(base_size = 12.5, base_family = "sans") +
   ggplot2::theme(
-    plot.background = ggplot2::element_rect(
-      fill = density_bg, color = NA
-    ),
-    panel.background = ggplot2::element_rect(
-      fill = density_bg, color = NA
-    ),
+    plot.background = ggplot2::element_rect(fill = density_bg, color = NA),
+    panel.background = ggplot2::element_rect(fill = density_bg, color = NA),
     plot.title = ggplot2::element_text(
-      size = 22,
-      face = "bold",
-      color = density_text,
-      margin = ggplot2::margin(b = 8)
+      size = 20, face = "bold", color = density_text,
+      margin = ggplot2::margin(b = 7)
     ),
     plot.subtitle = ggplot2::element_text(
-      size = 11.5,
-      color = density_subtitle,
+      size = 11, color = density_subtitle,
       margin = ggplot2::margin(b = 16)
     ),
     axis.title = ggplot2::element_text(
-      size = 10,
-      face = "bold",
-      color = density_text
+      size = 10.5, face = "bold", color = density_text
     ),
-    axis.title.x = ggplot2::element_text(
-      margin = ggplot2::margin(t = 14)
-    ),
-    axis.title.y = ggplot2::element_text(
-      margin = ggplot2::margin(r = 14)
-    ),
-    axis.text = ggplot2::element_text(
-      size = 10,
-      color = density_text
-    ),
+    axis.title.x = ggplot2::element_text(margin = ggplot2::margin(t = 12)),
+    axis.title.y = ggplot2::element_text(margin = ggplot2::margin(r = 10)),
+    axis.text = ggplot2::element_text(size = 9.5, color = density_text),
     panel.grid.minor = ggplot2::element_blank(),
     panel.grid.major.x = ggplot2::element_blank(),
-    panel.grid.major.y = ggplot2::element_line(
-      color = density_grid,
-      linewidth = 0.4
+    panel.grid.major.y = ggplot2::element_line(color = density_grid,
+                                               linewidth = 0.45),
+    strip.background = ggplot2::element_rect(fill = density_strip, color = NA),
+    strip.text = ggplot2::element_text(
+      size = 10.5, face = "bold", color = density_text,
+      margin = ggplot2::margin(9, 10, 9, 10)
     ),
-    legend.position = "top",
-    legend.justification = "right",
-    legend.title = ggplot2::element_text(
-      size = 10,
-      color = density_text
-    ),
-    legend.text = ggplot2::element_text(
-      size = 10,
-      color = density_text
-    ),
-    legend.key = ggplot2::element_rect(
-      fill = density_bg,
-      color = NA
-    ),
+    panel.spacing = grid::unit(1.15, "lines"),
     plot.caption = ggplot2::element_text(
-      size = 9,
-      color = density_caption,
-      hjust = 0,
+      size = 8.3, color = density_caption, hjust = 0,
       margin = ggplot2::margin(t = 16)
     ),
-    plot.margin = ggplot2::margin(25, 30, 22, 28)
+    plot.margin = ggplot2::margin(22, 26, 18, 24)
   )
 
-print(plot_skincare_density)
+print(plot_skincare_density_faceted)
 
 ggplot2::ggsave(
-  filename = file.path(
-    plots_dir, "density_04_ggplot_skincare_comparison.png"
-  ),
-  plot = plot_skincare_density,
+  filename = file.path(plots_dir, "density_04_ggplot_skincare_with_bars.png"),
+  plot = plot_skincare_density_faceted,
   width = 11,
-  height = 6.5,
+  height = 8,
   units = "in",
   dpi = 300,
   bg = density_bg
 )
 
-
-# Density plot using Base R
-
-regular_density <- stats::density(
-  log10(regular_prices),
-  bw = skincare_bw
-)
-
-exclusive_density <- stats::density(
-  log10(exclusive_prices),
-  bw = skincare_bw
-)
-
-density_ylim <- c(
-  0,
-  max(regular_density$y, exclusive_density$y) * 1.15
-)
-
-density_xlim <- range(
-  regular_density$x,
-  exclusive_density$x
-)
-
+# Additional Base R view: same two-panel presentation, density scale and bin edges.
+base_png <- file.path(plots_dir, "density_04_base_skincare_with_bars.png")
 grDevices::png(
-  filename = file.path(
-    plots_dir, "density_04_base_skincare_comparison.png"
-  ),
+  filename = base_png,
   width = 11,
-  height = 6.5,
+  height = 8,
   units = "in",
   res = 300,
   bg = density_bg
 )
 
+old_par <- par(no.readonly = TRUE)
 par(
-  mar = c(6.5, 5.5, 5.5, 2),
+  mfrow = c(2, 1),
+  oma = c(5.4, 5.0, 4.8, 1.0),
+  mar = c(2.1, 1.6, 2.45, 1.4),
   bg = density_bg,
   col.axis = density_text,
   col.lab = density_text,
-  col.main = density_text,
-  family = "sans"
+  family = "sans",
+  xaxs = "i",
+  yaxs = "i"
+)
+
+plot_density_panel <- function(hist_obj, kde_obj, median_price,
+                               color, bar_color, group_title, show_x_axis) {
+  plot(
+    NA_real_, NA_real_,
+    type = "n", axes = FALSE, xlab = "", ylab = "",
+    xlim = log10(c(3, 1900)), ylim = c(0, density_ymax)
+  )
+  
+  # Delicate horizontal grid, pale bars, strong KDE outline.
+  abline(h = pretty(c(0, density_ymax), n = 4),
+         col = density_grid, lwd = 0.8)
+  rect(
+    xleft = hist_obj$breaks[-length(hist_obj$breaks)],
+    ybottom = 0,
+    xright = hist_obj$breaks[-1],
+    ytop = hist_obj$density,
+    col = bar_color,
+    border = density_bg,
+    lwd = 0.65
+  )
+  lines(kde_obj$x, kde_obj$y, col = color, lwd = 3.2)
+  abline(v = log10(median_price), col = color, lty = 2, lwd = 1.8)
+  
+  # Label above the bars, kept inside the panel.
+  text(
+    x = log10(median_price) + 0.055,
+    y = density_ymax * 0.93,
+    labels = sprintf("Median  $%.0f", median_price),
+    adj = c(0, 0.5), cex = 0.94, col = color, font = 2
+  )
+  
+  axis(2, at = pretty(c(0, density_ymax), n = 4),
+       las = 1, cex.axis = 0.85, col = NA, col.ticks = NA)
+  if (show_x_axis) {
+    axis(1, at = log10(skincare_ticks), labels = skincare_tick_labels,
+         cex.axis = 0.86, col = NA, col.ticks = density_text)
+  }
+  mtext(group_title, side = 3, adj = 0, line = 0.65,
+        cex = 1.1, font = 2, col = density_text)
+}
+
+plot_density_panel(
+  regular_hist, regular_density, regular_median,
+  density_lavender, density_lavender_light,
+  regular_label, show_x_axis = FALSE
+)
+plot_density_panel(
+  exclusive_hist, exclusive_density, exclusive_median,
+  density_raspberry, density_raspberry_light,
+  exclusive_label, show_x_axis = TRUE
+)
+
+mtext("Skincare Prices by Sephora Exclusivity", side = 3,
+      outer = TRUE, adj = 0, line = 2.8,
+      font = 2, cex = 1.65, col = density_text)
+mtext("Price distribution within each group  |  Histogram and smoothed density",
+      side = 3, outer = TRUE, adj = 0, line = 1.3,
+      cex = 0.98, col = density_subtitle)
+mtext("Product price (USD, logarithmic scale)", side = 1,
+      outer = TRUE, line = 2.6, cex = 1.02, font = 2, col = density_text)
+mtext("Density per log10(price) unit", side = 2,
+      outer = TRUE, line = 3.2, cex = 1.02, font = 2, col = density_text)
+mtext("Source: Sephora Products and Skincare Reviews (Kaggle). Bars and curves normalized within each group; shared scales, bins and bandwidth.",
+      side = 1, outer = TRUE, line = 4.25,
+      adj = 0, cex = 0.70, col = density_caption)
+
+grDevices::dev.off()
+
+
+
+# MAIN REPORT VIEW: original overlapping density curves in both methods.
+# Curves share the same bandwidth; each group is normalized separately.
+density_subtitle_text <- sprintf(
+  "Non-exclusive: n = %s, median = $%.0f  |  Sephora-exclusive: n = %s, median = $%.0f",
+  format(length(regular_prices), big.mark = ","), regular_median,
+  format(length(exclusive_prices), big.mark = ","), exclusive_median
+)
+
+plot_skincare_density_overlay <- ggplot2::ggplot(
+  skincare_density,
+  ggplot2::aes(x = log_price, color = sephora_exclusive,
+               fill = sephora_exclusive)
+) +
+  ggplot2::geom_density(
+    bw = skincare_bw, alpha = 0.18, linewidth = 1.15
+  ) +
+  ggplot2::scale_color_manual(
+    values = line_colors,
+    breaks = c("No", "Yes"),
+    labels = c("Non-exclusive", "Sephora-exclusive")
+  ) +
+  ggplot2::scale_fill_manual(
+    values = line_colors,
+    breaks = c("No", "Yes"),
+    labels = c("Non-exclusive", "Sephora-exclusive")
+  ) +
+  ggplot2::scale_x_continuous(
+    breaks = log10(skincare_ticks),
+    labels = skincare_tick_labels,
+    expand = ggplot2::expansion(mult = c(0.01, 0.02))
+  ) +
+  ggplot2::scale_y_continuous(
+    expand = ggplot2::expansion(mult = c(0, 0.10))
+  ) +
+  ggplot2::labs(
+    title = "Distribution of Skincare Prices by Exclusivity",
+    subtitle = density_subtitle_text,
+    x = "Product price (USD, log10 scale)",
+    y = "Density per log10(price) unit",
+    color = "Sephora status", fill = "Sephora status",
+    caption = paste(
+      "Source: Sephora Products and Skincare Reviews (Kaggle).",
+      "Each curve is independently normalized; comparisons are descriptive."
+    )
+  ) +
+  ggplot2::theme_minimal(base_size = 13, base_family = "sans") +
+  ggplot2::theme(
+    plot.background = ggplot2::element_rect(fill = density_bg, color = NA),
+    panel.background = ggplot2::element_rect(fill = density_bg, color = NA),
+    plot.title = ggplot2::element_text(
+      size = 22, face = "bold", color = density_text,
+      margin = ggplot2::margin(b = 8)
+    ),
+    plot.subtitle = ggplot2::element_text(
+      size = 11.5, color = density_subtitle,
+      margin = ggplot2::margin(b = 16)
+    ),
+    axis.title = ggplot2::element_text(
+      size = 10, face = "bold", color = density_text
+    ),
+    axis.title.x = ggplot2::element_text(margin = ggplot2::margin(t = 14)),
+    axis.title.y = ggplot2::element_text(margin = ggplot2::margin(r = 14)),
+    axis.text = ggplot2::element_text(size = 10, color = density_text),
+    panel.grid.minor = ggplot2::element_blank(),
+    panel.grid.major.x = ggplot2::element_blank(),
+    panel.grid.major.y = ggplot2::element_line(
+      color = density_grid, linewidth = 0.4
+    ),
+    legend.position = "top",
+    legend.justification = "right",
+    legend.title = ggplot2::element_text(size = 10, color = density_text),
+    legend.text = ggplot2::element_text(size = 10, color = density_text),
+    legend.key = ggplot2::element_rect(fill = density_bg, color = NA),
+    plot.caption = ggplot2::element_text(
+      size = 9, color = density_caption, hjust = 0,
+      margin = ggplot2::margin(t = 16)
+    ),
+    plot.margin = ggplot2::margin(25, 30, 22, 28)
+  )
+
+print(plot_skincare_density_overlay)
+
+ggplot2::ggsave(
+  filename = file.path(plots_dir, "density_04_ggplot_skincare_comparison.png"),
+  plot = plot_skincare_density_overlay,
+  width = 11, height = 6.5, units = "in", dpi = 300, bg = density_bg
+)
+
+# Original Base R view: overlaid density curves, no bars.
+density_ylim <- c(
+  0, max(regular_density$y, exclusive_density$y) * 1.15
+)
+density_xlim <- range(regular_density$x, exclusive_density$x)
+
+grDevices::png(
+  filename = file.path(plots_dir, "density_04_base_skincare_comparison.png"),
+  width = 11, height = 6.5, units = "in", res = 300, bg = density_bg
+)
+
+par(
+  mar = c(6.5, 5.5, 5.5, 2), bg = density_bg,
+  col.axis = density_text, col.lab = density_text,
+  col.main = density_text, family = "sans"
 )
 
 plot(
   regular_density,
-  type = "n",
-  xlim = density_xlim,
-  ylim = density_ylim,
+  type = "n", xlim = density_xlim, ylim = density_ylim,
   main = "Distribution of Skincare Prices by Exclusivity",
   xlab = "Product price (USD, log10 scale)",
   ylab = "Density per log10(price) unit",
-  xaxt = "n",
-  axes = FALSE,
-  cex.main = 1.4,
-  cex.lab = 1
+  xaxt = "n", axes = FALSE,
+  cex.main = 1.4, cex.lab = 1
 )
-
-mtext(
-  density_subtitle_text,
-  side = 3,
-  line = 0.5,
-  cex = 0.85,
-  col = density_subtitle
-)
-
-abline(
-  h = pretty(density_ylim),
-  col = density_grid,
-  lwd = 0.8
-)
+mtext(density_subtitle_text, side = 3, line = 0.5,
+      cex = 0.85, col = density_subtitle)
+abline(h = pretty(density_ylim), col = density_grid, lwd = 0.8)
 
 polygon(
   c(regular_density$x, rev(regular_density$x)),
   c(regular_density$y, rep(0, length(regular_density$y))),
-  col = grDevices::adjustcolor(density_lavender, alpha.f = 0.20),
-  border = NA
+  col = grDevices::adjustcolor(density_lavender, alpha.f = 0.20), border = NA
 )
-
 polygon(
   c(exclusive_density$x, rev(exclusive_density$x)),
   c(exclusive_density$y, rep(0, length(exclusive_density$y))),
-  col = grDevices::adjustcolor(density_raspberry, alpha.f = 0.20),
-  border = NA
+  col = grDevices::adjustcolor(density_raspberry, alpha.f = 0.20), border = NA
 )
-
-lines(
-  regular_density,
-  col = density_lavender,
-  lwd = 2.5
-)
-
-lines(
-  exclusive_density,
-  col = density_raspberry,
-  lwd = 2.5
-)
-
-axis(
-  side = 1,
-  at = log10(skincare_ticks),
-  labels = skincare_tick_labels,
-  cex.axis = 0.85,
-  col.axis = density_text
-)
-
-axis(
-  side = 2,
-  las = 1,
-  cex.axis = 0.9,
-  col.axis = density_text
-)
-
+lines(regular_density, col = density_lavender, lwd = 2.5)
+lines(exclusive_density, col = density_raspberry, lwd = 2.5)
+axis(side = 1, at = log10(skincare_ticks), labels = skincare_tick_labels,
+     cex.axis = 0.85, col.axis = density_text)
+axis(side = 2, las = 1, cex.axis = 0.9, col.axis = density_text)
 box(bty = "l", col = density_text)
-
 legend(
-  "topright",
-  legend = c("Non-exclusive", "Sephora-exclusive"),
+  "topright", legend = c("Non-exclusive", "Sephora-exclusive"),
   col = c(density_lavender, density_raspberry),
-  lty = 1,
-  lwd = 2.5,
-  bty = "n",
-  cex = 0.95
+  lty = 1, lwd = 2.5, bty = "n", cex = 0.95
 )
-
 mtext(
   "Source: Sephora Products and Skincare Reviews (Kaggle). Density normalized within each group.",
-  side = 1,
-  line = 4.5,
-  adj = 0,
-  cex = 0.72,
-  col = density_caption
+  side = 1, line = 4.5, adj = 0, cex = 0.72, col = density_caption
 )
-
 grDevices::dev.off()
 
 cat("\nSaved density plots:\n")
 cat("results/plots/density_04_ggplot_skincare_comparison.png\n")
 cat("results/plots/density_04_base_skincare_comparison.png\n")
+cat("results/plots/density_04_ggplot_skincare_with_bars.png\n")
+cat("results/plots/density_04_base_skincare_with_bars.png\n")
 
 
 # STAGE 5 — BOXPLOT ANALYSIS
@@ -1055,6 +1175,13 @@ price_box_plot <- ggplot2::ggplot(
     fill = primary_category
   )
 ) +
+  
+  ggplot2::stat_boxplot(
+    geom = "errorbar",
+    width = 0.20,
+    linewidth = 0.6,
+    color = "#25233A"
+  ) +
   
   ggplot2::geom_boxplot(
     width = 0.55,
@@ -1395,9 +1522,19 @@ violin_rating_plot <- ggplot2::ggplot(
     alpha = 0.93
   ) +
   
+  ggplot2::stat_boxplot(
+    geom = "errorbar",
+    width = 0.22,
+    coef = 1.5,
+    color = violin_border,
+    linewidth = 0.58
+  ) +
+  
   ggplot2::geom_boxplot(
-    width = 0.13,
-    fill = "white",
+    width = 0.75,
+    fill = grDevices::adjustcolor(
+      "white", alpha.f = 0.50
+    ),
     color = violin_border,
     linewidth = 0.58,
     outlier.shape = NA
@@ -1586,9 +1723,12 @@ for (i in seq_along(violin_order)) {
     horizontal = TRUE,
     add = TRUE,
     at = i,
-    boxwex = 0.13,
-    col = "white",
+    boxwex = 1.5,
+    col = grDevices::adjustcolor(
+      "white", alpha.f = 0.50
+    ),
     border = violin_border,
+    boxlwd = 0.58,
     medcol = violin_border,
     medlwd = 1.5,
     outline = FALSE,
@@ -1958,9 +2098,19 @@ exclusivity_rating_plot <- ggplot2::ggplot(
     width = 0.75
   ) +
   
+  ggplot2::stat_boxplot(
+    geom = "errorbar",
+    width = 0.22,
+    coef = 1.5,
+    color = relation_text,
+    linewidth = 0.58
+  ) +
+  
   ggplot2::geom_boxplot(
-    width = 0.11,
-    fill = "white",
+    width = 0.75,
+    fill = grDevices::adjustcolor(
+      "white", alpha.f = 0.50
+    ),
     color = relation_text,
     outlier.shape = NA,
     linewidth = 0.6
